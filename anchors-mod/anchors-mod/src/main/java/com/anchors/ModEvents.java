@@ -6,6 +6,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
@@ -15,9 +16,11 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingDamageEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -32,6 +35,13 @@ public class ModEvents {
     /** Мелодия шкатулки: числа это ноты (12 = базовая), -1 = пауза. Одна нота раз в NOTE_INTERVAL тиков. */
     private static final int NOTE_INTERVAL = 8;
     private static final int[] MELODY = {12, 15, 19, 17, 15, 12, 10, 12, 15, 19, 22, 20, 19, 15, 17, -1};
+
+    /** Тихий мотив фонаря: "кто-то ищет дорогу домой". Одна нота раз в LANTERN_NOTE_INTERVAL тиков. */
+    private static final int LANTERN_NOTE_INTERVAL = 30;
+    private static final int[] LANTERN_MELODY = {12, 10, 7, -1, 10, 7, 3, -1};
+
+    /** Сколько "Угасания" мир забирает, когда кукла принимает смертельный удар. */
+    private static final double FADING_PER_DOLL_SAVE = 60.0;
 
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -49,6 +59,15 @@ public class ModEvents {
             }
             if (player.tickCount % 5 == 0) {
                 calmMonsters(player, level);
+            }
+        }
+
+        // Фонарь: тихий мотив
+        if (lantern && player.tickCount % LANTERN_NOTE_INTERVAL == 0) {
+            int note = LANTERN_MELODY[(player.tickCount / LANTERN_NOTE_INTERVAL) % LANTERN_MELODY.length];
+            if (note >= 0) {
+                float pitch = (float) Math.pow(2.0, (note - 12) / 12.0);
+                playAt(level, player.getX(), player.getY() + 1.0, player.getZ(), "block.note_block.flute", 0.45F, pitch);
             }
         }
 
@@ -74,6 +93,38 @@ public class ModEvents {
         }
 
         applyAtmosphere(player, level, data.getStage());
+    }
+
+    /** Кукла принимает смертельный удар вместо игрока. */
+    @SubscribeEvent
+    public static void onLivingDamage(LivingDamageEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (event.getSource().is(DamageTypeTags.BYPASSES_INVULNERABILITY)) return; // пустота, /kill
+        if (event.getAmount() < player.getHealth()) return; // удар не смертельный
+
+        ItemStack doll = RagDollItem.find(player);
+        if (doll.isEmpty()) return;
+
+        // Отменяем смертельный урон: игрок остаётся жив, но слаб
+        event.setCanceled(true);
+        player.setHealth(6.0F);
+        player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 1));
+        player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 40, 4));
+
+        ServerLevel level = player.serverLevel();
+        FadingData.get(level.getServer()).add(FADING_PER_DOLL_SAVE);
+
+        int cracks = RagDollItem.getCracks(doll) + 1;
+        if (cracks >= RagDollItem.MAX_CRACKS) {
+            doll.shrink(1);
+            player.displayClientMessage(Component.translatable("message.anchors.doll_broke"), true);
+            playAt(level, player.getX(), player.getY() + 1.0, player.getZ(), "block.wool.break", 1.0F, 0.5F);
+        } else {
+            RagDollItem.setCracks(doll, cracks);
+            player.displayClientMessage(Component.translatable("message.anchors.doll_saved"), true);
+            playAt(level, player.getX(), player.getY() + 1.0, player.getZ(), "block.wool.break", 1.0F, 0.7F);
+        }
+        playAt(level, player.getX(), player.getY() + 1.0, player.getZ(), "entity.warden.heartbeat", 1.0F, 0.8F);
     }
 
     /** Сила фонаря: видишь в темноте и видишь всех мобов рядом, даже через стены. */

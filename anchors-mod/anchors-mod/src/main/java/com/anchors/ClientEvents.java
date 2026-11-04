@@ -3,12 +3,15 @@ package com.anchors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.FogRenderer;
+import net.minecraft.client.resources.sounds.SoundInstance;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.FogType;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
 import net.minecraftforge.client.event.ViewportEvent;
+import net.minecraftforge.client.event.sound.PlaySoundEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -20,13 +23,16 @@ import net.minecraftforge.fml.common.Mod;
 public class ClientEvents {
 
     /** Насколько затемнён экран глубокой ночью БЕЗ фонаря (0.0 = не затемнять, 1.0 = полная чернота). */
-    private static final float DARKNESS_WITHOUT_LANTERN = 0.50F;
+    private static final float DARKNESS_WITHOUT_LANTERN = 0.55F;
 
     /** То же, но когда в руке включённый фонарь. */
     private static final float DARKNESS_WITH_LANTERN = 0.25F;
 
     /** Как далеко видно ночью без фонаря (в блоках). Дальше всё тонет в чёрном тумане. */
     private static final float NIGHT_FOG_DISTANCE = 28.0F;
+
+    /** Выключить и музыкальные пластинки из проигрывателя? (false = пластинки играют как обычно) */
+    private static final boolean MUTE_MUSIC_DISCS = false;
 
     /** 0 = день или закат, 1 = глубокая ночь. */
     private static float nightFactor(ClientLevel level, float partialTick) {
@@ -67,6 +73,18 @@ public class ClientEvents {
 
     @Mod.EventBusSubscriber(modid = AnchorsMod.MOD_ID, value = Dist.CLIENT)
     public static class ForgeBus {
+
+        /** Вся оригинальная фоновая музыка Minecraft отключена: в меню, в мире, в пещерах, под водой. */
+        @SubscribeEvent
+        public static void onPlaySound(PlaySoundEvent event) {
+            SoundInstance sound = event.getSound();
+            if (sound == null) return;
+
+            SoundSource source = sound.getSource();
+            if (source == SoundSource.MUSIC || (MUTE_MUSIC_DISCS && source == SoundSource.RECORDS)) {
+                event.setSound(null);
+            }
+        }
 
         /** Ночью без фонаря: густой чёрный туман, видно только вблизи. */
         @SubscribeEvent

@@ -20,6 +20,7 @@ public class AnchorsMod {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(ModItems.OLD_LANTERN);
             event.accept(ModItems.MUSIC_BOX);
+            event.accept(ModItems.RAG_DOLL);
         }
     }
 }
