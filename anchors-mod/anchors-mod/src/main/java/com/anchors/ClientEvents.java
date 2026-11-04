@@ -23,10 +23,10 @@ import net.minecraftforge.fml.common.Mod;
 public class ClientEvents {
 
     /** Насколько затемнён экран глубокой ночью БЕЗ фонаря (0.0 = не затемнять, 1.0 = полная чернота). */
-    private static final float DARKNESS_WITHOUT_LANTERN = 0.55F;
+    private static final float DARKNESS_WITHOUT_LANTERN = 0.75F;
 
     /** То же, но когда в руке включённый фонарь. */
-    private static final float DARKNESS_WITH_LANTERN = 0.25F;
+    private static final float DARKNESS_WITH_LANTERN = 0.23F;
 
     /** Как далеко видно ночью без фонаря (в блоках). Дальше всё тонет в чёрном тумане. */
     private static final float NIGHT_FOG_DISTANCE = 28.0F;
