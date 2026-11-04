@@ -1,0 +1,16 @@
+{
+  "item.anchors.old_lantern": "Old Lantern",
+  "item.anchors.old_lantern.desc": "It remembers someone searching for the way home.",
+  "item.anchors.music_box": "Music Box",
+  "item.anchors.music_box.desc": "A lullaby sung in a dark room. Something else can hear it too.",
+  "message.anchors.lantern_on": "The lantern flickers to life...",
+  "message.anchors.lantern_off": "The lantern goes dark.",
+  "message.anchors.music_box_on": "The music box begins to play...",
+  "message.anchors.music_box_off": "The music box falls silent.",
+  "message.anchors.stage_1": "The world grows quieter...",
+  "message.anchors.stage_2": "Something is watching from the dark.",
+  "message.anchors.stage_3": "The world is forgetting.",
+  "message.anchors.stage_4": "He is coming.",
+  "command.anchors.fading.get": "Fading: %s (stage %s)",
+  "command.anchors.fading.set": "Fading is now %s (stage %s)"
+}
