@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "NNN",
+    "GTG",
+    "NIN"
+  ],
+  "key": {
+    "N": { "item": "minecraft:iron_nugget" },
+    "G": { "item": "minecraft:glass_pane" },
+    "T": { "item": "minecraft:torch" },
+    "I": { "item": "minecraft:iron_ingot" }
+  },
+  "result": { "item": "anchors:old_lantern" }
+}
