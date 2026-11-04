@@ -14,6 +14,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
@@ -24,25 +25,49 @@ import net.minecraftforge.registries.ForgeRegistries;
 @Mod.EventBusSubscriber(modid = AnchorsMod.MOD_ID)
 public class ModEvents {
 
-    /** Сколько "Угасания" добавляется за каждую секунду с включённым фонарём. */
-    private static final double FADING_PER_SECOND = 1.0;
+    /** Сколько "Угасания" добавляется за каждую секунду с включённым предметом. */
+    private static final double FADING_PER_SECOND_LANTERN = 1.0;
+    private static final double FADING_PER_SECOND_MUSIC_BOX = 1.0;
+
+    /** Мелодия шкатулки: числа это ноты (12 = базовая), -1 = пауза. Одна нота раз в NOTE_INTERVAL тиков. */
+    private static final int NOTE_INTERVAL = 8;
+    private static final int[] MELODY = {12, 15, 19, 17, 15, 12, 10, 12, 15, 19, 22, 20, 19, 15, 17, -1};
 
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.player instanceof ServerPlayer player)) return;
-        if (player.tickCount % 20 != 0) return; // раз в секунду
 
         ServerLevel level = player.serverLevel();
+        boolean lantern = OldLanternItem.holdsActive(player);
+        boolean box = MusicBoxItem.holdsActive(player);
+
+        // Шкатулка: играет мелодию и успокаивает монстров рядом
+        if (box) {
+            if (player.tickCount % NOTE_INTERVAL == 0) {
+                playMusicBoxNote(player, level);
+            }
+            if (player.tickCount % 5 == 0) {
+                calmMonsters(player, level);
+            }
+        }
+
+        if (player.tickCount % 20 != 0) return; // дальше раз в секунду
+
         FadingData data = FadingData.get(level.getServer());
 
-        if (OldLanternItem.holdsActive(player)) {
+        double cost = 0;
+        if (lantern) cost += FADING_PER_SECOND_LANTERN;
+        if (box) cost += FADING_PER_SECOND_MUSIC_BOX;
+
+        if (cost > 0) {
             int before = data.getStage();
-            data.add(FADING_PER_SECOND);
+            data.add(cost);
             int after = data.getStage();
 
-            useLanternPower(player, level);
-
+            if (lantern) {
+                useLanternPower(player, level);
+            }
             if (after > before) {
                 player.displayClientMessage(Component.translatable("message.anchors.stage_" + after), true);
             }
@@ -58,6 +83,34 @@ public class ModEvents {
         AABB area = player.getBoundingBox().inflate(16.0);
         for (Mob mob : level.getEntitiesOfClass(Mob.class, area)) {
             mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, 40, 0, false, false, false));
+        }
+    }
+
+    /** Одна нота мелодии шкатулки. На стадии 2+ иногда откуда-то издалека отвечает искажённое эхо. */
+    private static void playMusicBoxNote(ServerPlayer player, ServerLevel level) {
+        int note = MELODY[(player.tickCount / NOTE_INTERVAL) % MELODY.length];
+        if (note < 0) return;
+
+        float pitch = (float) Math.pow(2.0, (note - 12) / 12.0);
+        playAt(level, player.getX(), player.getY() + 1.0, player.getZ(), "block.note_block.bell", 0.8F, pitch);
+
+        int stage = FadingData.get(level.getServer()).getStage();
+        if (stage >= 2 && level.random.nextInt(6) == 0) {
+            double angle = level.random.nextDouble() * Math.PI * 2;
+            playAt(level,
+                    player.getX() + Math.cos(angle) * 10,
+                    player.getY() + 1.0,
+                    player.getZ() + Math.sin(angle) * 10,
+                    "block.note_block.bell", 0.5F, Math.max(0.5F, pitch * 0.5F));
+        }
+    }
+
+    /** Монстры рядом забывают про игрока и еле двигаются. */
+    private static void calmMonsters(ServerPlayer player, ServerLevel level) {
+        AABB area = player.getBoundingBox().inflate(12.0);
+        for (Monster monster : level.getEntitiesOfClass(Monster.class, area)) {
+            monster.setTarget(null);
+            monster.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 40, 1, false, false, false));
         }
     }
 
@@ -96,12 +149,16 @@ public class ModEvents {
     }
 
     private static void playAround(ServerLevel level, ServerPlayer player, String soundId, float volume, float pitch) {
-        SoundEvent sound = ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation(soundId));
-        if (sound == null) return;
         RandomSource r = level.random;
         double x = player.getX() + (r.nextDouble() - 0.5) * 24;
         double y = player.getY() + (r.nextDouble() - 0.5) * 6;
         double z = player.getZ() + (r.nextDouble() - 0.5) * 24;
+        playAt(level, x, y, z, soundId, volume, pitch);
+    }
+
+    private static void playAt(ServerLevel level, double x, double y, double z, String soundId, float volume, float pitch) {
+        SoundEvent sound = ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation(soundId));
+        if (sound == null) return;
         level.playSound(null, x, y, z, sound, SoundSource.AMBIENT, volume, pitch);
     }
 

@@ -11,4 +11,7 @@ public class ModItems {
 
     public static final RegistryObject<Item> OLD_LANTERN = ITEMS.register("old_lantern",
             () -> new OldLanternItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> MUSIC_BOX = ITEMS.register("music_box",
+            () -> new MusicBoxItem(new Item.Properties().stacksTo(1)));
 }
