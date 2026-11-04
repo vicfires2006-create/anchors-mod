@@ -1,0 +1,12 @@
+{
+  "item.anchors.old_lantern": "Old Lantern",
+  "item.anchors.old_lantern.desc": "It remembers someone searching for the way home.",
+  "message.anchors.lantern_on": "The lantern flickers to life...",
+  "message.anchors.lantern_off": "The lantern goes dark.",
+  "message.anchors.stage_1": "The world grows quieter...",
+  "message.anchors.stage_2": "Something is watching from the dark.",
+  "message.anchors.stage_3": "The world is forgetting.",
+  "message.anchors.stage_4": "He is coming.",
+  "command.anchors.fading.get": "Fading: %s (stage %s)",
+  "command.anchors.fading.set": "Fading is now %s (stage %s)"
+}

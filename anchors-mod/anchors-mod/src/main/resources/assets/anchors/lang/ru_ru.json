@@ -1,0 +1,12 @@
+{
+  "item.anchors.old_lantern": "Старый фонарь",
+  "item.anchors.old_lantern.desc": "Он помнит, как кто-то искал дорогу домой.",
+  "message.anchors.lantern_on": "Фонарь нехотя разгорается...",
+  "message.anchors.lantern_off": "Фонарь гаснет.",
+  "message.anchors.stage_1": "Мир становится тише...",
+  "message.anchors.stage_2": "Из темноты кто-то смотрит.",
+  "message.anchors.stage_3": "Мир забывает.",
+  "message.anchors.stage_4": "Он приближается.",
+  "command.anchors.fading.get": "Угасание: %s (стадия %s)",
+  "command.anchors.fading.set": "Угасание теперь %s (стадия %s)"
+}
