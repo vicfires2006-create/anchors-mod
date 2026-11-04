@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 
 import net.minecraft.commands.Commands;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.DamageTypeTags;
@@ -16,11 +17,13 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDamageEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -42,6 +45,9 @@ public class ModEvents {
 
     /** Сколько "Угасания" мир забирает, когда кукла принимает смертельный удар. */
     private static final double FADING_PER_DOLL_SAVE = 60.0;
+
+    /** Метка "этому игроку уже ставили сундук с дневником" (хранится вместе с игроком). */
+    private static final String TAG_DIARY_GIVEN = "anchors_diary_given";
 
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -93,6 +99,31 @@ public class ModEvents {
         }
 
         applyAtmosphere(player, level, data.getStage());
+    }
+
+    /** Первый раз в этом мире: рядом с игроком появляется сундук с дневником. */
+    @SubscribeEvent
+    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        CompoundTag persisted = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
+        if (persisted.getBoolean(TAG_DIARY_GIVEN)) return;
+
+        persisted.putBoolean(TAG_DIARY_GIVEN, true);
+        player.getPersistentData().put(Player.PERSISTED_NBT_TAG, persisted);
+
+        DiaryChest.spawnNear(player);
+    }
+
+    /** Команда /diary: поставить ещё один сундук с дневником рядом с собой (для проверки). */
+    @SubscribeEvent
+    public static void onRegisterDiaryCommand(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("diary")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> {
+                    DiaryChest.spawnNear(ctx.getSource().getPlayerOrException());
+                    return 1;
+                }));
     }
 
     /** Кукла принимает смертельный удар вместо игрока. */
