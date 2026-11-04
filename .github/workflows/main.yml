@@ -18,12 +18,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.5
+          build-root-directory: anchors-mod
 
       - name: Build
+        working-directory: anchors-mod
         run: gradle build --no-daemon
 
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
           name: anchors-mod
-          path: build/libs/*.jar
+          path: anchors-mod/build/libs/*.jar
