@@ -7,14 +7,20 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Mob;
@@ -22,13 +28,17 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CandleBlock;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDamageEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import net.minecraftforge.registries.ForgeRegistries;
 
 @Mod.EventBusSubscriber(modid = AnchorsMod.MOD_ID)
@@ -51,6 +61,12 @@ public class ModEvents {
 
     /** Метка "этому игроку уже ставили сундук с дневником" (хранится вместе с игроком). */
     private static final String TAG_DIARY_GIVEN = "anchors_diary_given";
+
+    /**
+     * Сколько Угасания мир набирает сам каждую секунду после того, как кто-то впервые взял якорь.
+     * 0.4 в секунду = примерно 40 минут до четвёртой стадии (приход Коллекционера), если не пользоваться якорями.
+     */
+    private static final double PASSIVE_FADING_PER_SECOND = 0.4;
 
     /**
      * Когда (в секундах игры в обычном мире) появляется очередная постройка:
@@ -94,6 +110,16 @@ public class ModEvents {
 
         FadingData data = FadingData.get(level.getServer());
 
+        // Ритуал завершён: Угасания больше нет. Тихий невидимый эффект сообщает клиенту,
+        // что тёмные ночи не нужны, а оригинальная музыка может вернуться.
+        if (data.isRitualDone()) {
+            player.addEffect(new MobEffectInstance(MobEffects.LUCK, 100, 0, false, false, false));
+            if (lantern) {
+                useLanternPower(player, level);
+            }
+            return;
+        }
+
         double cost = 0;
         if (lantern) cost += FADING_PER_SECOND_LANTERN;
         if (box) cost += FADING_PER_SECOND_MUSIC_BOX;
@@ -112,6 +138,151 @@ public class ModEvents {
         }
 
         applyAtmosphere(player, level, data.getStage());
+    }
+
+    /** Номер якоря в порядке ритуала: 0 фонарь, 1 шкатулка, 2 кукла, -1 это не якорь. */
+    private static int anchorKind(ItemStack stack) {
+        if (stack.getItem() instanceof OldLanternItem) return 0;
+        if (stack.getItem() instanceof MusicBoxItem) return 1;
+        if (stack.getItem() instanceof RagDollItem) return 2;
+        return -1;
+    }
+
+    private static boolean hasAnyAnchor(ServerPlayer player) {
+        for (ItemStack stack : player.getInventory().items) {
+            if (anchorKind(stack) >= 0) return true;
+        }
+        for (ItemStack stack : player.getInventory().offhand) {
+            if (anchorKind(stack) >= 0) return true;
+        }
+        return false;
+    }
+
+    /** Раз в секунду на сервере: включает таймер, когда кто-то впервые взял якорь, и сам растит Угасание. */
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null || server.getTickCount() % 20 != 0) return;
+
+        FadingData data = FadingData.get(server);
+        if (data.isRitualDone()) return;
+
+        if (!data.isTimerStarted()) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (hasAnyAnchor(player)) {
+                    data.startTimer();
+                    break;
+                }
+            }
+            return;
+        }
+
+        int before = data.getStage();
+        data.add(PASSIVE_FADING_PER_SECOND);
+        int after = data.getStage();
+        if (after > before) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                player.displayClientMessage(Component.translatable("message.anchors.stage_" + after), true);
+            }
+        }
+    }
+
+    /** Ритуал: правый клик якорем по алтарю (или по свечам перед ним). Порядок: фонарь, шкатулка, кукла. */
+    @SubscribeEvent
+    public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide()) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+
+        ServerLevel level = player.serverLevel();
+        FadingData data = FadingData.get(level.getServer());
+        BlockPos altar = data.getAltarPos();
+        if (altar == null || data.isRitualDone()) return;
+
+        BlockPos clicked = event.getPos();
+        boolean onAltar = clicked.equals(altar)
+                || (clicked.getY() == altar.getY()
+                    && clicked.getZ() == altar.getZ() + 1
+                    && Math.abs(clicked.getX() - altar.getX()) <= 1);
+        if (!onAltar) return;
+
+        ItemStack held = player.getMainHandItem();
+        int kind = anchorKind(held);
+        if (kind < 0) return; // не якорь: ничего особенного не происходит
+
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
+
+        int progress = data.getRitualProgress();
+        double ax = altar.getX() + 0.5;
+        double ay = altar.getY() + 1.0;
+        double az = altar.getZ() + 0.5;
+
+        if (kind != progress) {
+            player.displayClientMessage(Component.translatable("message.anchors.ritual_wrong"), true);
+            playAt(level, ax, ay, az, "block.candle.extinguish", 1.0F, 0.8F);
+            return;
+        }
+
+        held.shrink(1);
+
+        // зажигаем очередную свечу перед алтарём
+        BlockPos candle = altar.offset(-1 + progress, 0, 1);
+        level.setBlock(candle, Blocks.CANDLE.defaultBlockState().setValue(CandleBlock.LIT, true), 3);
+
+        level.sendParticles(ParticleTypes.SOUL, ax, ay + 0.2, az, 14, 0.3, 0.4, 0.3, 0.02);
+        float[] pitches = {0.8F, 1.0F, 1.3F};
+        playAt(level, ax, ay, az, "block.note_block.bell", 1.0F, pitches[progress]);
+
+        data.setRitualProgress(progress + 1);
+        if (progress + 1 >= 3) {
+            completeRitual(level, player, data);
+        } else {
+            player.displayClientMessage(Component.translatable("message.anchors.ritual_step_" + (progress + 1)), true);
+        }
+    }
+
+    /** Хорошая концовка: души свободны, постройки целы, Угасание исчезает. */
+    private static void completeRitual(ServerLevel level, ServerPlayer player, FadingData data) {
+        data.setRitualDone(true);
+        data.set(0);
+
+        BlockPos altar = data.getAltarPos();
+        double ax = altar.getX() + 0.5;
+        double az = altar.getZ() + 0.5;
+
+        // души поднимаются над алтарём
+        for (int i = 0; i < 8; i++) {
+            double y = altar.getY() + 1.0 + i * 0.7;
+            level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, ax, y, az, 20, 0.4, 0.3, 0.4, 0.03);
+            level.sendParticles(ParticleTypes.SOUL, ax, y, az, 10, 0.4, 0.3, 0.4, 0.05);
+        }
+
+        // аккорд колокольчиков и далёкий гул
+        float[] chord = {0.7F, 0.84F, 1.0F, 1.26F, 1.5F};
+        for (float pitch : chord) {
+            playAt(level, ax, altar.getY() + 1.0, az, "block.note_block.bell", 1.0F, pitch);
+        }
+        playAt(level, ax, altar.getY() + 1.0, az, "block.beacon.activate", 1.0F, 0.8F);
+
+        // чиним все постройки
+        for (FadingData.StructureRecord record : data.getStructures()) {
+            AbandonedStructures.restore(level, record.pos(), AbandonedStructures.Kind.values()[record.kind()]);
+        }
+
+        // надпись на экране у всех игроков
+        for (ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
+            p.connection.send(new ClientboundSetTitlesAnimationPacket(20, 100, 40));
+            p.connection.send(new ClientboundSetSubtitleTextPacket(Component.translatable("message.anchors.ritual_subtitle")));
+            p.connection.send(new ClientboundSetTitleTextPacket(Component.translatable("message.anchors.ritual_title")));
+        }
+
+        // последняя запись дневника достаётся тому, кто завершил ритуал
+        ItemStack last = DiaryBook.entry(4);
+        if (!player.getInventory().add(last)) {
+            player.drop(last, false);
+        }
     }
 
     /** Считает время игры и, когда приходит срок, строит рядом заброшенную постройку с якорем. */

@@ -6,6 +6,7 @@ import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.FogType;
 import net.minecraftforge.api.distmarker.Dist;
@@ -23,10 +24,10 @@ import net.minecraftforge.fml.common.Mod;
 public class ClientEvents {
 
     /** Насколько затемнён экран глубокой ночью БЕЗ фонаря (0.0 = не затемнять, 1.0 = полная чернота). */
-    private static final float DARKNESS_WITHOUT_LANTERN = 0.75F;
+    private static final float DARKNESS_WITHOUT_LANTERN = 0.55F;
 
     /** То же, но когда в руке включённый фонарь. */
-    private static final float DARKNESS_WITH_LANTERN = 0.23F;
+    private static final float DARKNESS_WITH_LANTERN = 0.25F;
 
     /** Как далеко видно ночью без фонаря (в блоках). Дальше всё тонет в чёрном тумане. */
     private static final float NIGHT_FOG_DISTANCE = 28.0F;
@@ -40,12 +41,21 @@ public class ClientEvents {
         return Mth.clamp(-cos * 1.5F, 0.0F, 1.0F);
     }
 
+    /**
+     * После ритуала сервер каждую секунду даёт игроку невидимый эффект "Удача".
+     * По нему клиент понимает, что мир освобождён: тёмные ночи выключаются, музыка возвращается.
+     */
+    private static boolean isRitualDone(Minecraft mc) {
+        return mc.player != null && mc.player.hasEffect(MobEffects.LUCK);
+    }
+
     /** Действуют ли тёмные ночи сейчас: только в обычном мире, не в режиме наблюдателя. */
     private static boolean applies(Minecraft mc) {
         return mc.level != null
                 && mc.player != null
                 && mc.level.dimension() == Level.OVERWORLD
-                && !mc.player.isSpectator();
+                && !mc.player.isSpectator()
+                && !isRitualDone(mc); // после ритуала ночи снова обычные
     }
 
     @Mod.EventBusSubscriber(modid = AnchorsMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
@@ -79,6 +89,9 @@ public class ClientEvents {
         public static void onPlaySound(PlaySoundEvent event) {
             SoundInstance sound = event.getSound();
             if (sound == null) return;
+
+            // Ритуал завершён: музыка Minecraft возвращается
+            if (isRitualDone(Minecraft.getInstance())) return;
 
             SoundSource source = sound.getSource();
             if (source == SoundSource.MUSIC || (MUTE_MUSIC_DISCS && source == SoundSource.RECORDS)) {
