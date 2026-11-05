@@ -27,5 +27,6 @@
   "message.anchors.ritual_step_1": "Первая свеча горит. Свет показал душам дорогу.",
   "message.anchors.ritual_step_2": "Вторая свеча горит. Колыбельная зазвучала снова.",
   "message.anchors.ritual_title": "Души свободны",
-  "message.anchors.ritual_subtitle": "Мир снова вздохнул"
+  "message.anchors.ritual_subtitle": "Мир снова вздохнул",
+  "entity.anchors.collector": "Коллекционер"
 }

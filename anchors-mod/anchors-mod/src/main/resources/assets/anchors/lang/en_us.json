@@ -27,5 +27,6 @@
   "message.anchors.ritual_step_1": "The first candle burns. The light has shown them the way.",
   "message.anchors.ritual_step_2": "The second candle burns. The lullaby sounds once more.",
   "message.anchors.ritual_title": "The souls are free",
-  "message.anchors.ritual_subtitle": "The world breathes again"
+  "message.anchors.ritual_subtitle": "The world breathes again",
+  "entity.anchors.collector": "The Collector"
 }
