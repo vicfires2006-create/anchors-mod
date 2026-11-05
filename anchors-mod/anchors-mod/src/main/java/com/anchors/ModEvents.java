@@ -1,8 +1,10 @@
 package com.anchors;
 
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -19,6 +21,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
@@ -48,6 +51,14 @@ public class ModEvents {
 
     /** Метка "этому игроку уже ставили сундук с дневником" (хранится вместе с игроком). */
     private static final String TAG_DIARY_GIVEN = "anchors_diary_given";
+
+    /**
+     * Когда (в секундах игры в обычном мире) появляется очередная постройка:
+     * первая (фонарь), вторая (шкатулка), третья (кукла). Меняй числа как хочешь.
+     */
+    private static final int[] HOUSE_DELAYS_SECONDS = {300, 720, 1200};
+    private static final String TAG_PLAY_SECONDS = "anchors_play_seconds";
+    private static final String TAG_HOUSES_BUILT = "anchors_houses_built";
 
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -79,6 +90,8 @@ public class ModEvents {
 
         if (player.tickCount % 20 != 0) return; // дальше раз в секунду
 
+        trackHouses(player, level);
+
         FadingData data = FadingData.get(level.getServer());
 
         double cost = 0;
@@ -99,6 +112,50 @@ public class ModEvents {
         }
 
         applyAtmosphere(player, level, data.getStage());
+    }
+
+    /** Считает время игры и, когда приходит срок, строит рядом заброшенную постройку с якорем. */
+    private static void trackHouses(ServerPlayer player, ServerLevel level) {
+        if (level.dimension() != Level.OVERWORLD) return;
+
+        CompoundTag persisted = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
+        int built = persisted.getInt(TAG_HOUSES_BUILT);
+        if (built >= HOUSE_DELAYS_SECONDS.length) return;
+
+        int seconds = persisted.getInt(TAG_PLAY_SECONDS) + 1;
+        persisted.putInt(TAG_PLAY_SECONDS, seconds);
+
+        if (seconds >= HOUSE_DELAYS_SECONDS[built]) {
+            BlockPos where = AbandonedStructures.spawnNear(player, AbandonedStructures.Kind.values()[built]);
+            if (where != null) {
+                persisted.putInt(TAG_HOUSES_BUILT, built + 1);
+                player.displayClientMessage(Component.translatable("message.anchors.house_hint"), true);
+                playAt(level, player.getX(), player.getY(), player.getZ(), "ambient.cave", 0.9F, 0.5F);
+            } else {
+                // подходящего места не нашлось: попробуем снова через 20 секунд
+                persisted.putInt(TAG_PLAY_SECONDS, HOUSE_DELAYS_SECONDS[built] - 20);
+            }
+        }
+        player.getPersistentData().put(Player.PERSISTED_NBT_TAG, persisted);
+    }
+
+    /** Команда /house 1, 2 или 3: сразу построить постройку (1 дом, 2 подвал, 3 руины) и показать координаты. */
+    @SubscribeEvent
+    public static void onRegisterHouseCommand(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("house")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("number", IntegerArgumentType.integer(1, 3)).executes(ctx -> {
+                    ServerPlayer player = ctx.getSource().getPlayerOrException();
+                    int number = IntegerArgumentType.getInteger(ctx, "number");
+                    BlockPos where = AbandonedStructures.spawnNear(player, AbandonedStructures.Kind.values()[number - 1]);
+                    if (where == null) {
+                        ctx.getSource().sendFailure(Component.translatable("command.anchors.house.fail"));
+                        return 0;
+                    }
+                    ctx.getSource().sendSuccess(() -> Component.translatable(
+                            "command.anchors.house.ok", where.getX(), where.getY(), where.getZ()), false);
+                    return 1;
+                })));
     }
 
     /** Первый раз в этом мире: рядом с игроком появляется сундук с дневником. */
@@ -238,7 +295,7 @@ public class ModEvents {
         playAt(level, x, y, z, soundId, volume, pitch);
     }
 
-    private static void playAt(ServerLevel level, double x, double y, double z, String soundId, float volume, float pitch) {
+    static void playAt(ServerLevel level, double x, double y, double z, String soundId, float volume, float pitch) {
         SoundEvent sound = ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation(soundId));
         if (sound == null) return;
         level.playSound(null, x, y, z, sound, SoundSource.AMBIENT, volume, pitch);
