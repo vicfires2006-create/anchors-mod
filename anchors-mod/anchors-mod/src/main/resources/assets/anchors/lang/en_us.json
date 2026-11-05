@@ -22,5 +22,10 @@
   "command.anchors.fading.set": "Fading is now %s (stage %s)",
   "message.anchors.house_hint": "Somewhere nearby, something has changed...",
   "command.anchors.house.ok": "Built at X=%s Y=%s Z=%s",
-  "command.anchors.house.fail": "Could not find a flat dry spot nearby. Try again from another place."
+  "command.anchors.house.fail": "Could not find a flat dry spot nearby. Try again from another place.",
+  "message.anchors.ritual_wrong": "The altar stays silent. The order must be different.",
+  "message.anchors.ritual_step_1": "The first candle burns. The light has shown them the way.",
+  "message.anchors.ritual_step_2": "The second candle burns. The lullaby sounds once more.",
+  "message.anchors.ritual_title": "The souls are free",
+  "message.anchors.ritual_subtitle": "The world breathes again"
 }

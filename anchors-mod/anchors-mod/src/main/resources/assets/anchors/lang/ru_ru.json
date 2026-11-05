@@ -22,5 +22,10 @@
   "command.anchors.fading.set": "Угасание теперь %s (стадия %s)",
   "message.anchors.house_hint": "Где-то неподалёку что-то изменилось...",
   "command.anchors.house.ok": "Построено: X=%s Y=%s Z=%s",
-  "command.anchors.house.fail": "Не нашлось ровного сухого места рядом. Попробуй из другого места."
+  "command.anchors.house.fail": "Не нашлось ровного сухого места рядом. Попробуй из другого места.",
+  "message.anchors.ritual_wrong": "Алтарь молчит. Видимо, порядок должен быть другим.",
+  "message.anchors.ritual_step_1": "Первая свеча горит. Свет показал душам дорогу.",
+  "message.anchors.ritual_step_2": "Вторая свеча горит. Колыбельная зазвучала снова.",
+  "message.anchors.ritual_title": "Души свободны",
+  "message.anchors.ritual_subtitle": "Мир снова вздохнул"
 }
