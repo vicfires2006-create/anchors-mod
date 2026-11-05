@@ -30,7 +30,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CandleBlock;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDamageEvent;
@@ -327,6 +329,51 @@ public class ModEvents {
                             "command.anchors.house.ok", where.getX(), where.getY(), where.getZ()), false);
                     return 1;
                 })));
+    }
+
+    /** Команда /collector: вызвать Коллекционера метрах в 25 перед собой. /collector remove: убрать всех рядом. */
+    @SubscribeEvent
+    public static void onRegisterCollectorCommand(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("collector")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> {
+                    spawnCollector(ctx.getSource().getPlayerOrException());
+                    return 1;
+                })
+                .then(Commands.literal("remove").executes(ctx -> {
+                    ServerPlayer player = ctx.getSource().getPlayerOrException();
+                    int removed = 0;
+                    for (CollectorEntity collector : player.serverLevel()
+                            .getEntitiesOfClass(CollectorEntity.class, player.getBoundingBox().inflate(300.0))) {
+                        collector.discard();
+                        removed++;
+                    }
+                    return removed;
+                })));
+    }
+
+    private static void spawnCollector(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        Vec3 look = player.getLookAngle();
+        double dx = look.x;
+        double dz = look.z;
+        double length = Math.sqrt(dx * dx + dz * dz);
+        if (length < 0.01) {
+            dx = 0.0;
+            dz = 1.0;
+            length = 1.0;
+        }
+        double x = player.getX() + dx / length * 25.0;
+        double z = player.getZ() + dz / length * 25.0;
+        int bx = (int) Math.floor(x);
+        int bz = (int) Math.floor(z);
+        level.getChunk(bx >> 4, bz >> 4);
+        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
+
+        CollectorEntity collector = ModEntities.COLLECTOR.get().create(level);
+        if (collector == null) return;
+        collector.moveTo(x, y, z, player.getYRot() + 180.0F, 0.0F);
+        level.addFreshEntity(collector);
     }
 
     /** Первый раз в этом мире: рядом с игроком появляется сундук с дневником. */

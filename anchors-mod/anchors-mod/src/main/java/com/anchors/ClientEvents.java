@@ -10,6 +10,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.FogType;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.client.event.sound.PlaySoundEvent;
@@ -60,6 +61,11 @@ public class ClientEvents {
 
     @Mod.EventBusSubscriber(modid = AnchorsMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static class ModBus {
+        @SubscribeEvent
+        public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+            event.registerEntityRenderer(ModEntities.COLLECTOR.get(), CollectorRenderer::new);
+        }
+
         @SubscribeEvent
         public static void registerOverlays(RegisterGuiOverlaysEvent event) {
             // Чёрная полупрозрачная накладка на мир, под всем интерфейсом (хотбар и чат остаются яркими)
