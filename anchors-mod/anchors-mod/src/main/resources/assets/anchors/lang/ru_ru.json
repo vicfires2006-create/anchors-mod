@@ -19,5 +19,8 @@
   "message.anchors.stage_3": "Мир забывает.",
   "message.anchors.stage_4": "Он приближается.",
   "command.anchors.fading.get": "Угасание: %s (стадия %s)",
-  "command.anchors.fading.set": "Угасание теперь %s (стадия %s)"
+  "command.anchors.fading.set": "Угасание теперь %s (стадия %s)",
+  "message.anchors.house_hint": "Где-то неподалёку что-то изменилось...",
+  "command.anchors.house.ok": "Построено: X=%s Y=%s Z=%s",
+  "command.anchors.house.fail": "Не нашлось ровного сухого места рядом. Попробуй из другого места."
 }

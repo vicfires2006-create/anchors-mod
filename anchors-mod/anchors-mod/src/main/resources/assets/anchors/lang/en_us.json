@@ -19,5 +19,8 @@
   "message.anchors.stage_3": "The world is forgetting.",
   "message.anchors.stage_4": "He is coming.",
   "command.anchors.fading.get": "Fading: %s (stage %s)",
-  "command.anchors.fading.set": "Fading is now %s (stage %s)"
+  "command.anchors.fading.set": "Fading is now %s (stage %s)",
+  "message.anchors.house_hint": "Somewhere nearby, something has changed...",
+  "command.anchors.house.ok": "Built at X=%s Y=%s Z=%s",
+  "command.anchors.house.fail": "Could not find a flat dry spot nearby. Try again from another place."
 }
