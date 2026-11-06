@@ -19,7 +19,7 @@ public class CollectorRenderer extends HumanoidMobRenderer<CollectorEntity, Huma
     private static final float SCALE = 1.25F;
 
     public CollectorRenderer(EntityRendererProvider.Context context) {
-        super(context, new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), 0.5F);
+        super(context, new CollectorModel(context.bakeLayer(ModelLayers.PLAYER)), 0.5F);
     }
 
     @Override

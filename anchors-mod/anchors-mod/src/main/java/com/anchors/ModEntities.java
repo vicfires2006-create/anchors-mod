@@ -19,6 +19,7 @@ public class ModEntities {
                     .sized(0.7F, 2.3F)
                     .fireImmune()
                     .clientTrackingRange(16)
+                    .updateInterval(1)
                     .build("collector"));
 
     @Mod.EventBusSubscriber(modid = AnchorsMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD)

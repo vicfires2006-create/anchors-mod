@@ -27,6 +27,7 @@ public class FadingData extends SavedData {
     private double fading;
     private boolean timerStarted;
     private boolean ritualDone;
+    private boolean worldLost;
     private int ritualProgress;
     private BlockPos altarPos;
     private final List<StructureRecord> structures = new ArrayList<>();
@@ -41,6 +42,7 @@ public class FadingData extends SavedData {
         data.fading = tag.getDouble("Fading");
         data.timerStarted = tag.getBoolean("TimerStarted");
         data.ritualDone = tag.getBoolean("RitualDone");
+        data.worldLost = tag.getBoolean("WorldLost");
         data.ritualProgress = tag.getInt("RitualProgress");
         if (tag.contains("AltarPos")) {
             data.altarPos = BlockPos.of(tag.getLong("AltarPos"));
@@ -58,6 +60,7 @@ public class FadingData extends SavedData {
         tag.putDouble("Fading", fading);
         tag.putBoolean("TimerStarted", timerStarted);
         tag.putBoolean("RitualDone", ritualDone);
+        tag.putBoolean("WorldLost", worldLost);
         tag.putInt("RitualProgress", ritualProgress);
         if (altarPos != null) {
             tag.putLong("AltarPos", altarPos.asLong());
@@ -137,6 +140,18 @@ public class FadingData extends SavedData {
 
     public void setAltarPos(BlockPos pos) {
         this.altarPos = pos;
+        setDirty();
+    }
+
+    // ---------- Плохая концовка ----------
+
+    /** Коллекционер забрал мир: войти в него больше нельзя. */
+    public boolean isWorldLost() {
+        return worldLost;
+    }
+
+    public void setWorldLost(boolean lost) {
+        this.worldLost = lost;
         setDirty();
     }
 

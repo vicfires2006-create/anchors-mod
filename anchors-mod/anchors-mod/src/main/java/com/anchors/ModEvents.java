@@ -77,6 +77,13 @@ public class ModEvents {
     private static final double PASSIVE_FADING_PER_SECOND = 0.4;
 
     /**
+     * Сколько Угасания нужно, чтобы время вышло и пришёл Коллекционер (плохая концовка).
+     * Четвёртая стадия начинается с 1000, так что до этого момента у игрока есть ещё немного времени.
+     * ВНИМАНИЕ: при тестах не ставь /fading set больше этого числа, иначе мир закроется насовсем.
+     */
+    private static final double BAD_ENDING_FADING = 1200.0;
+
+    /**
      * Когда (в секундах игры в обычном мире) появляется очередная постройка:
      * первая (фонарь), вторая (шкатулка), третья (кукла). Меняй числа как хочешь.
      */
@@ -157,6 +164,13 @@ public class ModEvents {
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
         MusicBoxFreeze.releaseSaved(event.getEntity());
+
+        // Коллекционер из прерванной сцены (игра закрылась посреди неё) не возвращается
+        if (event.getEntity() instanceof CollectorEntity collector
+                && collector.getPersistentData().getBoolean(BadEnding.TAG_SCENE)
+                && !BadEnding.isActive()) {
+            event.setCanceled(true);
+        }
     }
 
     /** Перед остановкой сервера всех размораживаем и убираем временное. */
@@ -165,11 +179,23 @@ public class ModEvents {
         MusicBoxFreeze.releaseAll();
         GlitchEffects.clearAll();
         EndingScene.clear();
+        BadEnding.clear();
     }
 
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         GlitchEffects.clearPlayer(event.getEntity().getUUID());
+    }
+
+    /** Команда /badending: проверить плохую концовку. Мир после неё НЕ закрывается. */
+    @SubscribeEvent
+    public static void onRegisterBadEndingCommand(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("badending")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> {
+                    BadEnding.start(ctx.getSource().getServer(), true);
+                    return 1;
+                }));
     }
 
     /** Номер якоря в порядке ритуала: 0 фонарь, 1 шкатулка, 2 кукла, -1 это не якорь. */
@@ -201,6 +227,7 @@ public class ModEvents {
         if (tick % 5 == 0) MusicBoxFreeze.release(tick);
         GlitchEffects.tick(server);
         EndingScene.tick(server);
+        BadEnding.tick(server);
 
         if (tick % 20 != 0) return;
 
@@ -224,6 +251,11 @@ public class ModEvents {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 player.displayClientMessage(Component.translatable("message.anchors.stage_" + after), true);
             }
+        }
+
+        // время вышло: плохая концовка
+        if (data.getFading() >= BAD_ENDING_FADING && !BadEnding.isActive() && !data.isWorldLost()) {
+            BadEnding.start(server, false);
         }
     }
 
@@ -425,6 +457,12 @@ public class ModEvents {
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        // Коллекционер забрал этот мир: войти нельзя
+        if (FadingData.get(player.serverLevel().getServer()).isWorldLost()) {
+            player.connection.disconnect(Component.literal("Этого мира больше нет. Его забрал Коллекционер."));
+            return;
+        }
 
         CompoundTag persisted = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
         if (persisted.getBoolean(TAG_DIARY_GIVEN)) return;

@@ -14,6 +14,7 @@ public class AnchorsMod {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         ModItems.ITEMS.register(modBus);
         ModEntities.ENTITIES.register(modBus);
+        ModSounds.SOUNDS.register(modBus);
         modBus.addListener(this::addToCreativeTab);
     }
 
