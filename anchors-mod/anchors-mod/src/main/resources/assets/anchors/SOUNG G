@@ -1,7 +1,0 @@
-{
-  "collector_theme": {
-    "sounds": [
-      { "name": "anchors:collector_theme", "stream": true }
-    ]
-  }
-}
