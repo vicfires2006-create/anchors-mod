@@ -245,6 +245,25 @@ public class AbandonedStructures {
                     }
         }
 
+        /** Тёмно-красное пятно на полу ("кровь"). */
+        BlockState bloodFloor() {
+            return random.nextFloat() < 0.6F
+                    ? Blocks.NETHER_WART_BLOCK.defaultBlockState()
+                    : Blocks.RED_TERRACOTTA.defaultBlockState();
+        }
+
+        /** Убирает кровавые ковры (после починки). */
+        void cleanBlood(int halfX, int halfZ, int minDy, int maxDy) {
+            for (int dx = -halfX; dx <= halfX; dx++)
+                for (int dy = minDy; dy <= maxDy; dy++)
+                    for (int dz = -halfZ; dz <= halfZ; dz++) {
+                        BlockPos pos = origin.offset(dx, dy, dz);
+                        if (level.getBlockState(pos).is(Blocks.RED_CARPET)) {
+                            level.setBlock(pos, AIR, 2);
+                        }
+                    }
+        }
+
         /** Расчищает площадку от деревьев и травы и подсыпает землю под будущий пол. */
         void prepare(int halfX, int halfZ, int height) {
             if (restored) return;
@@ -583,13 +602,36 @@ public class AbandonedStructures {
                 }
             }
 
+            // помост из тёмного камня вокруг алтаря
+            for (int dx = -2; dx <= 2; dx++)
+                for (int dz = -2; dz <= 2; dz++)
+                    set(dx, -1, dz, Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState());
+            for (int dx = -2; dx <= 2; dx++) {
+                set(dx, -1, 2, Blocks.CHISELED_POLISHED_BLACKSTONE.defaultBlockState());
+            }
+
             // алтарь в центре, на нём сундук
             set(0, 0, 0, Blocks.CHISELED_STONE_BRICKS.defaultBlockState());
             chest(0, 1, 0, Direction.SOUTH, anchor, note);
 
-            // два синих огня по бокам алтаря
+            // большой крест за алтарём из тёмного дерева, к нему подвешены синие фонари на цепях
+            BlockState crossLog = log(Blocks.STRIPPED_DARK_OAK_LOG, Direction.Axis.Y);
+            BlockState crossArm = log(Blocks.STRIPPED_DARK_OAK_LOG, Direction.Axis.X);
+            set(0, 0, -3, Blocks.CHISELED_POLISHED_BLACKSTONE.defaultBlockState());
+            for (int dy = 1; dy <= 5; dy++) set(0, dy, -3, crossLog);
+            for (int dx = -2; dx <= 2; dx++) {
+                if (dx != 0) set(dx, 4, -3, crossArm);
+            }
+            for (int dx = -2; dx <= 2; dx += 4) {
+                set(dx, 3, -3, Blocks.CHAIN.defaultBlockState());
+                set(dx, 2, -3, Blocks.SOUL_LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true));
+            }
+
+            // синие огни: фонари по бокам алтаря и два костра душ у основания креста
             set(-2, 0, 0, Blocks.SOUL_LANTERN.defaultBlockState());
             set(2, 0, 0, Blocks.SOUL_LANTERN.defaultBlockState());
+            set(-3, 0, -2, Blocks.SOUL_CAMPFIRE.defaultBlockState());
+            set(3, 0, -2, Blocks.SOUL_CAMPFIRE.defaultBlockState());
 
             // три свечи перед алтарём: на ритуале зажигаются по одной (при починке не трогаем: они уже горят)
             if (!restored) {
@@ -598,7 +640,47 @@ public class AbandonedStructures {
                 }
             }
 
-            if (restored) cleanDecay(4, 4, 0, 6);
+            // кровь: лужа у подножия креста, следы от входа к алтарю, пятна и обрывки красной ткани
+            if (!restored) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    for (int dz = -3; dz <= -1; dz++) {
+                        if (random.nextFloat() < 0.55F) set(dx, -1, dz, bloodFloor());
+                    }
+                }
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = 0; dz <= 4; dz++) {
+                        if (random.nextFloat() < 0.45F) set(dx, -1, dz, bloodFloor());
+                        if (dz != 1 && random.nextFloat() < 0.25F) setIfAir(dx, 0, dz, Blocks.RED_CARPET.defaultBlockState());
+                    }
+                }
+                for (int i = 0; i < 6; i++) {
+                    int dx = random.nextInt(7) - 3;
+                    int dz = random.nextInt(7) - 3;
+                    if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) continue;
+                    set(dx, -1, dz, bloodFloor());
+                }
+                // подтёки на ступени и на основании креста
+                set(0, 1, -3, Blocks.RED_TERRACOTTA.defaultBlockState());
+                set(0, 2, -3, random.nextBoolean() ? Blocks.RED_TERRACOTTA.defaultBlockState() : crossLog);
+            }
+
+            // после ритуала у алтаря расцветают цветы
+            if (restored) {
+                BlockState[] flowers = {
+                        Blocks.OXEYE_DAISY.defaultBlockState(),
+                        Blocks.LILY_OF_THE_VALLEY.defaultBlockState(),
+                        Blocks.AZURE_BLUET.defaultBlockState(),
+                        Blocks.POPPY.defaultBlockState()};
+                int[][] flowerSpots = {{-3, 1}, {3, 1}, {-3, -1}, {3, -1}, {-2, 3}, {2, 3}, {-1, 3}, {1, 3}};
+                for (int i = 0; i < flowerSpots.length; i++) {
+                    setIfAir(flowerSpots[i][0], 0, flowerSpots[i][1], flowers[i % flowers.length]);
+                }
+            }
+
+            if (restored) {
+                cleanDecay(4, 4, 0, 6);
+                cleanBlood(4, 4, 0, 1);
+            }
         }
     }
 }

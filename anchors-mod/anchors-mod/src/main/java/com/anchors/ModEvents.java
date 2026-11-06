@@ -18,12 +18,16 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -35,9 +39,11 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDamageEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.server.ServerLifecycleHooks;
@@ -140,6 +146,30 @@ public class ModEvents {
         }
 
         applyAtmosphere(player, level, data.getStage());
+
+        if (data.getStage() >= 3) {
+            repelCreatures(player, level, data.getFading());
+        }
+    }
+
+    /** Существо, загруженное из сохранения замороженным шкатулкой, размораживается. */
+    @SubscribeEvent
+    public static void onEntityJoin(EntityJoinLevelEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        MusicBoxFreeze.releaseSaved(event.getEntity());
+    }
+
+    /** Перед остановкой сервера всех размораживаем и убираем временное. */
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        MusicBoxFreeze.releaseAll();
+        GlitchEffects.clearAll();
+        EndingScene.clear();
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        GlitchEffects.clearPlayer(event.getEntity().getUUID());
     }
 
     /** Номер якоря в порядке ритуала: 0 фонарь, 1 шкатулка, 2 кукла, -1 это не якорь. */
@@ -165,7 +195,14 @@ public class ModEvents {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null || server.getTickCount() % 20 != 0) return;
+        if (server == null) return;
+
+        int tick = server.getTickCount();
+        if (tick % 5 == 0) MusicBoxFreeze.release(tick);
+        GlitchEffects.tick(server);
+        EndingScene.tick(server);
+
+        if (tick % 20 != 0) return;
 
         FadingData data = FadingData.get(server);
         if (data.isRitualDone()) return;
@@ -279,6 +316,14 @@ public class ModEvents {
             p.connection.send(new ClientboundSetSubtitleTextPacket(Component.translatable("message.anchors.ritual_subtitle")));
             p.connection.send(new ClientboundSetTitleTextPacket(Component.translatable("message.anchors.ritual_title")));
         }
+
+        // клиентам сразу сообщаем, что мир свободен (тёмные ночи выключаются, музыка возвращается)
+        for (ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
+            p.addEffect(new MobEffectInstance(MobEffects.LUCK, 100, 0, false, false, false));
+        }
+
+        // спокойная мелодия и три души, которые заходят в чат поблагодарить и уйти гулять
+        EndingScene.start(level.getServer());
 
         // последняя запись дневника достаётся тому, кто завершил ритуал
         ItemStack last = DiaryBook.entry(4);
@@ -462,12 +507,43 @@ public class ModEvents {
         }
     }
 
-    /** Монстры рядом забывают про игрока и еле двигаются. */
+    /** Враги в небольшом радиусе замирают: не двигаются и не нападают, даже если их ударить. */
     private static void calmMonsters(ServerPlayer player, ServerLevel level) {
-        AABB area = player.getBoundingBox().inflate(12.0);
-        for (Monster monster : level.getEntitiesOfClass(Monster.class, area)) {
-            monster.setTarget(null);
-            monster.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 40, 1, false, false, false));
+        MusicBoxFreeze.freezeAround(player, level, level.getServer().getTickCount());
+    }
+
+    /**
+     * Третья стадия Угасания: жители и звери постепенно отворачиваются от игрока и уходят прочь.
+     * Сначала уходит пятая часть, к концу третьей стадии уходят почти все.
+     */
+    private static void repelCreatures(ServerPlayer player, ServerLevel level, double fading) {
+        double progress = Mth.clamp((fading - 600.0) / 400.0, 0.0, 1.0);
+        int percent = 20 + (int) (progress * 80);
+
+        AABB area = player.getBoundingBox().inflate(28.0);
+        for (Mob mob : level.getEntitiesOfClass(Mob.class, area)) {
+            if (mob instanceof CollectorEntity) continue;
+            if (mob.isNoAi()) continue;
+            if (Math.floorMod(mob.getUUID().hashCode(), 100) >= percent) continue;
+
+            double dx = mob.getX() - player.getX();
+            double dz = mob.getZ() - player.getZ();
+            double length = Math.sqrt(dx * dx + dz * dz);
+            if (length < 0.1) {
+                dx = 1.0;
+                dz = 0.0;
+                length = 1.0;
+            }
+            double targetX = mob.getX() + dx / length * 16.0;
+            double targetZ = mob.getZ() + dz / length * 16.0;
+
+            mob.setTarget(null);
+            if (mob instanceof Villager villager) {
+                villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(new Vec3(targetX, mob.getY(), targetZ), 0.6F, 1));
+            } else {
+                mob.getNavigation().moveTo(targetX, mob.getY(), targetZ, 1.1D);
+            }
         }
     }
 
@@ -501,6 +577,9 @@ public class ModEvents {
                     player.getZ() + Math.sin(angle) * dist,
                     6, 0.4, 0.8, 0.4, 0.01);
         }
+
+        // Глюки: сломанные текстуры, кровь, ямы, пропадающие дома, заморозка экрана
+        GlitchEffects.secondTick(player, level, stage);
 
         // Стадия 4: здесь позже появится Коллекционер
     }
