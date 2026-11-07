@@ -1,0 +1,27 @@
+{
+  "display": {
+    "icon": { "item": "anchors:old_lantern" },
+    "title": { "text": "Он тебя заметил" },
+    "description": { "text": "Ты взял первый якорь. Теперь мир начнёт угасать." },
+    "background": "minecraft:textures/gui/advancements/backgrounds/stone.png",
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "lantern": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "items": [ "anchors:old_lantern" ] } ] }
+    },
+    "music_box": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "items": [ "anchors:music_box" ] } ] }
+    },
+    "rag_doll": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "items": [ "anchors:rag_doll" ] } ] }
+    }
+  },
+  "requirements": [ [ "lantern", "music_box", "rag_doll" ] ]
+}
