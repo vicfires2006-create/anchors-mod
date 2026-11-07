@@ -1,0 +1,6 @@
+json
+{
+  "variants": {
+    "": { "model": "anchors:item/glitch_block" }
+  }
+}
