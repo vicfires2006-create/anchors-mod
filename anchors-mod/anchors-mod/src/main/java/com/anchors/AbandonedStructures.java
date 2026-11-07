@@ -5,6 +5,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -37,6 +38,9 @@ import net.minecraft.world.level.levelgen.Heightmap;
  *   RUINS  - каменные руины с алтарём, на нём сундук с тряпичной куклой и записью 3
  */
 public class AbandonedStructures {
+
+    /** Метка на раме над алтарём: в неё нужно вставить перевёрнутый крест. */
+    public static final String TAG_ALTAR_FRAME = "anchors_altar_frame";
 
     public enum Kind { CABIN, CELLAR, RUINS }
 
@@ -632,6 +636,14 @@ public class AbandonedStructures {
             set(2, 0, 0, Blocks.SOUL_LANTERN.defaultBlockState());
             set(-3, 0, -2, Blocks.SOUL_CAMPFIRE.defaultBlockState());
             set(3, 0, -2, Blocks.SOUL_CAMPFIRE.defaultBlockState());
+
+            // пустая рама на кресте над алтарём: в неё нужно вставить перевёрнутый крест
+            if (!restored) {
+                ItemFrame frame = new ItemFrame(level, origin.offset(0, 2, -2), Direction.SOUTH);
+                frame.setInvulnerable(true);
+                frame.getPersistentData().putBoolean(TAG_ALTAR_FRAME, true);
+                level.addFreshEntity(frame);
+            }
 
             // три свечи перед алтарём: на ритуале зажигаются по одной (при починке не трогаем: они уже горят)
             if (!restored) {

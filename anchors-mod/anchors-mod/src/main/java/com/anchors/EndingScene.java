@@ -20,9 +20,16 @@ import net.minecraftforge.registries.ForgeRegistries;
 public final class EndingScene {
 
     // Имена трёх душ в чате. Можно заменить на любые.
-    private static final String MOTHER = "Мать";
-    private static final String SON = "Сын";
-    private static final String DAUGHTER = "Дочка";
+    private static final String MOTHER = "Лилит";
+    private static final String SON = "Оскар";
+    private static final String DAUGHTER = "Эмма";
+
+    // Общее письмо трёх душ игроку. Можно править текст как угодно.
+    private static final String LETTER = """
+            «Спасибо тебе. Ты пришёл, нашёл наши души и не побоялся пройти этот путь до конца. Теперь нам легко дышать. По-настоящему легко.
+            Всё снова живёт.
+            Спасибо, что не прошёл мимо.
+            — Лилит, Эмма и Оскар»""";
 
     private record ChatEvent(int dueTick, Component text) {}
 
@@ -46,23 +53,19 @@ public final class EndingScene {
         int now = server.getTickCount();
         EVENTS.clear();
 
+        // три души по очереди заходят в чат (жёлтым, как настоящий вход игрока)
         joined(now, 4, MOTHER);
-        say(now, 7, MOTHER, "Тихо... Я слышу колыбельную. Шкатулка снова играет, и теперь только для нас. Спасибо тебе. Я так долго ждала, что кто-нибудь дойдёт до конца.");
+        joined(now, 9, SON);
+        joined(now, 14, DAUGHTER);
 
-        joined(now, 14, SON);
-        say(now, 17, SON, "Фонарь горит ровно, и тени больше не двигаются неправильно. Ты показал нам дорогу домой. Спасибо.");
+        // одно общее письмо игроку
+        EVENTS.add(new ChatEvent(now + 20 * 20,
+                Component.literal(LETTER).withStyle(ChatFormatting.ITALIC)));
 
-        joined(now, 25, DAUGHTER);
-        say(now, 28, DAUGHTER, "Мне больше не страшно! Ты не бросил мою куклу, и она не дала тебя в обиду. Спасибо-спасибо-спасибо!");
-
-        say(now, 37, MOTHER, "Посмотрите, как всё стало красиво. Дома целые, цветы вернулись, а небо снова светлое. Мы так давно этого не видели.");
-        say(now, 46, SON, "Можно, мы пойдём гулять по миру? Я хочу пройти по всем тропам, которые так и не успел найти.");
-        say(now, 55, DAUGHTER, "Давайте посмотрим на всё вместе! Спасибо, что освободил нас. Мы будем помнить тебя.");
-        say(now, 64, MOTHER, "Живи долго, и пусть тебе всегда будет светло.");
-
-        left(now, 69, MOTHER);
-        left(now, 70, SON);
-        left(now, 71, DAUGHTER);
+        // и они уходят гулять по освобождённому миру
+        left(now, 50, MOTHER);
+        left(now, 51, SON);
+        left(now, 52, DAUGHTER);
 
         musicStart = now;
         musicEnd = now + MUSIC_SECONDS * 20;

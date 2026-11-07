@@ -1,14 +1,19 @@
 package com.anchors;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
 
 /**
@@ -28,6 +33,11 @@ public class FadingData extends SavedData {
     private boolean timerStarted;
     private boolean ritualDone;
     private boolean worldLost;
+    private boolean crossPlaced;
+
+    /** Блоки, которые глюки по-настоящему удалили (деревья и постройки). После ритуала они возвращаются. */
+    private final List<BlockPos> removedPositions = new ArrayList<>();
+    private final List<BlockState> removedStates = new ArrayList<>();
     private int ritualProgress;
     private BlockPos altarPos;
     private final List<StructureRecord> structures = new ArrayList<>();
@@ -43,6 +53,21 @@ public class FadingData extends SavedData {
         data.timerStarted = tag.getBoolean("TimerStarted");
         data.ritualDone = tag.getBoolean("RitualDone");
         data.worldLost = tag.getBoolean("WorldLost");
+        data.crossPlaced = tag.getBoolean("CrossPlaced");
+
+        ListTag palette = tag.getList("RemovedPalette", Tag.TAG_COMPOUND);
+        List<BlockState> paletteStates = new ArrayList<>();
+        for (int i = 0; i < palette.size(); i++) {
+            paletteStates.add(NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), palette.getCompound(i)));
+        }
+        int[] ids = tag.getIntArray("RemovedIds");
+        long[] positions = tag.getLongArray("RemovedPos");
+        for (int i = 0; i < ids.length && i < positions.length; i++) {
+            if (ids[i] >= 0 && ids[i] < paletteStates.size()) {
+                data.removedPositions.add(BlockPos.of(positions[i]));
+                data.removedStates.add(paletteStates.get(ids[i]));
+            }
+        }
         data.ritualProgress = tag.getInt("RitualProgress");
         if (tag.contains("AltarPos")) {
             data.altarPos = BlockPos.of(tag.getLong("AltarPos"));
@@ -61,6 +86,26 @@ public class FadingData extends SavedData {
         tag.putBoolean("TimerStarted", timerStarted);
         tag.putBoolean("RitualDone", ritualDone);
         tag.putBoolean("WorldLost", worldLost);
+        tag.putBoolean("CrossPlaced", crossPlaced);
+
+        ListTag palette = new ListTag();
+        Map<BlockState, Integer> paletteIndex = new HashMap<>();
+        int[] ids = new int[removedPositions.size()];
+        long[] positions = new long[removedPositions.size()];
+        for (int i = 0; i < removedPositions.size(); i++) {
+            BlockState state = removedStates.get(i);
+            Integer index = paletteIndex.get(state);
+            if (index == null) {
+                index = palette.size();
+                paletteIndex.put(state, index);
+                palette.add(NbtUtils.writeBlockState(state));
+            }
+            ids[i] = index;
+            positions[i] = removedPositions.get(i).asLong();
+        }
+        tag.put("RemovedPalette", palette);
+        tag.putIntArray("RemovedIds", ids);
+        tag.putLongArray("RemovedPos", positions);
         tag.putInt("RitualProgress", ritualProgress);
         if (altarPos != null) {
             tag.putLong("AltarPos", altarPos.asLong());
@@ -140,6 +185,44 @@ public class FadingData extends SavedData {
 
     public void setAltarPos(BlockPos pos) {
         this.altarPos = pos;
+        setDirty();
+    }
+
+    // ---------- Перевёрнутый крест в раме над алтарём ----------
+
+    public boolean isCrossPlaced() {
+        return crossPlaced;
+    }
+
+    public void setCrossPlaced(boolean placed) {
+        this.crossPlaced = placed;
+        setDirty();
+    }
+
+    // ---------- Настоящие удаления глюками ----------
+
+    public int getRemovedCount() {
+        return removedPositions.size();
+    }
+
+    /** Запоминает блок, который сейчас будет удалён (чтобы вернуть его после ритуала). */
+    public void addRemoved(BlockPos pos, BlockState state) {
+        removedPositions.add(pos.immutable());
+        removedStates.add(state);
+        setDirty();
+    }
+
+    /** Возвращает все удалённые блоки на место (только там, где сейчас пусто). */
+    public void restoreRemoved(ServerLevel level) {
+        for (int i = 0; i < removedPositions.size(); i++) {
+            BlockPos pos = removedPositions.get(i);
+            level.getChunk(pos.getX() >> 4, pos.getZ() >> 4);
+            if (level.getBlockState(pos).isAir()) {
+                level.setBlock(pos, removedStates.get(i), 2);
+            }
+        }
+        removedPositions.clear();
+        removedStates.clear();
         setDirty();
     }
 

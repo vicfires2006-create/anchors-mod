@@ -17,4 +17,7 @@ public class ModItems {
 
     public static final RegistryObject<Item> RAG_DOLL = ITEMS.register("rag_doll",
             () -> new RagDollItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> INVERTED_CROSS = ITEMS.register("inverted_cross",
+            () -> new InvertedCrossItem(new Item.Properties().stacksTo(1)));
 }

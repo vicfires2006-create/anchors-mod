@@ -1,11 +1,15 @@
 package com.anchors;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import org.joml.Vector3f;
 
@@ -47,11 +51,16 @@ public final class GlitchEffects {
     private static final int[] CHANCE_FREEZE_PERMILLE = {10, 25};
     private static final int FREEZE_COOLDOWN_TICKS = 20 * 90;
 
+    /** Настоящее удаление деревьев и построек (шанс за секунду в промилле по стадиям 2, 3, 4). */
+    private static final int[] CHANCE_DELETE_PERMILLE = {0, 15, 40};
+    /** Сколько блоков глюки могут удалить за весь мир. После ритуала все они возвращаются. */
+    private static final int MAX_REMOVED_BLOCKS = 20000;
+    /** Рядом с постройками с якорями (в блоках) ничего не удаляется. */
+    private static final int PROTECT_RADIUS = 16;
+
     /** Не больше стольких поддельных блоков у одного игрока одновременно. */
     private static final int MAX_FAKE_BLOCKS = 1500;
 
-    private static final BlockState MAGENTA = Blocks.MAGENTA_CONCRETE.defaultBlockState();
-    private static final BlockState BLACK = Blocks.BLACK_CONCRETE.defaultBlockState();
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
     private record Restore(BlockPos pos, int dueTick) {}
@@ -80,6 +89,7 @@ public final class GlitchEffects {
         if (random.nextInt(100) < CHANCE_HOLE[index]) groundHole(player, level, tick);
         if (random.nextInt(100) < CHANCE_BUILDING[index]) buildingGlitch(player, level, tick, stage >= 4);
         if (stage >= 3) tryFreeze(player, level, tick, stage);
+        if (random.nextInt(1000) < CHANCE_DELETE_PERMILLE[index]) deleteTreeOrBuilding(player, level);
     }
 
     // =====================================================================
@@ -254,6 +264,97 @@ public final class GlitchEffects {
         playNotify(player, "entity.warden.heartbeat", 1.0F, 0.6F);
     }
 
+    /**
+     * По-настоящему удаляет дерево или рукотворную постройку метрах в 10-35 от игрока.
+     * Каждый удалённый блок запоминается, и после ритуала всё возвращается на место.
+     * Постройки с якорями и всё рядом с ними не трогаем.
+     */
+    private static void deleteTreeOrBuilding(ServerPlayer player, ServerLevel level) {
+        FadingData data = FadingData.get(level.getServer());
+        if (data.getRemovedCount() >= MAX_REMOVED_BLOCKS) return;
+
+        boolean tree = level.random.nextBoolean();
+        Predicate<BlockState> seedTest = tree ? state -> state.is(BlockTags.LOGS) : GlitchEffects::isManMade;
+        Predicate<BlockState> bodyTest = tree
+                ? state -> state.is(BlockTags.LOGS) || state.is(BlockTags.LEAVES)
+                : GlitchEffects::isManMade;
+
+        BlockPos seed = findSeed(player, level, seedTest);
+        if (seed == null) return;
+
+        Set<BlockPos> blocks = floodFill(level, seed, bodyTest, tree ? 500 : 700);
+        if (blocks.size() < (tree ? 6 : 12)) return;
+
+        // ничего не удаляем рядом с постройками с якорями
+        for (BlockPos pos : blocks) {
+            if (nearModStructure(data, pos)) return;
+        }
+
+        for (BlockPos pos : blocks) {
+            data.addRemoved(pos, level.getBlockState(pos));
+            level.setBlock(pos, AIR, 2);
+        }
+
+        DustParticleOptions dust = new DustParticleOptions(new Vector3f(0.15F, 0.0F, 0.15F), 2.0F);
+        level.sendParticles(player, dust, false, seed.getX() + 0.5, seed.getY() + 1.0, seed.getZ() + 0.5,
+                40, 2.0, 2.0, 2.0, 0.0);
+        playNotify(player, "block.sculk.shriek", 0.4F, 0.6F);
+    }
+
+    /** Ищет подходящий блок (бревно или часть постройки) на расстоянии 10-35 блоков от игрока. */
+    private static BlockPos findSeed(ServerPlayer player, ServerLevel level, Predicate<BlockState> test) {
+        RandomSource random = level.random;
+        for (int attempt = 0; attempt < 8; attempt++) {
+            double angle = random.nextDouble() * Math.PI * 2;
+            double dist = 10 + random.nextDouble() * 25;
+            int x = (int) Math.floor(player.getX() + Math.cos(angle) * dist);
+            int z = (int) Math.floor(player.getZ() + Math.sin(angle) * dist);
+            BlockPos ground = surfaceAt(level, x, z);
+            if (ground == null) continue;
+            for (int dy = -3; dy <= 12; dy++) {
+                BlockPos pos = ground.above(dy);
+                if (level.hasChunkAt(pos) && test.test(level.getBlockState(pos))) return pos;
+            }
+        }
+        return null;
+    }
+
+    /** Собирает связанные блоки (в том числе по диагонали), пока не наберётся limit. */
+    private static Set<BlockPos> floodFill(ServerLevel level, BlockPos start, Predicate<BlockState> test, int limit) {
+        Set<BlockPos> found = new HashSet<>();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        found.add(start);
+        queue.add(start);
+        while (!queue.isEmpty() && found.size() < limit) {
+            BlockPos current = queue.poll();
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dy == 0 && dz == 0) continue;
+                        BlockPos next = current.offset(dx, dy, dz);
+                        if (found.contains(next) || !level.hasChunkAt(next)) continue;
+                        if (!test.test(level.getBlockState(next))) continue;
+                        found.add(next);
+                        queue.add(next);
+                        if (found.size() >= limit) return found;
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    private static boolean nearModStructure(FadingData data, BlockPos pos) {
+        for (FadingData.StructureRecord record : data.getStructures()) {
+            BlockPos origin = record.pos();
+            if (Math.abs(origin.getX() - pos.getX()) <= PROTECT_RADIUS
+                    && Math.abs(origin.getZ() - pos.getZ()) <= PROTECT_RADIUS) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // =====================================================================
     // Помощники
     // =====================================================================
@@ -272,9 +373,9 @@ public final class GlitchEffects {
         list.add(new Restore(pos.immutable(), tick + duration));
     }
 
-    /** Фиолетово-чёрная шахматка, как настоящая "сломанная текстура". */
+    /** Блок с настоящей "сломанной текстурой" (картинка лежит в textures/item/glitch.png). */
     private static BlockState checker(BlockPos pos) {
-        return ((pos.getX() + pos.getY() + pos.getZ()) & 1) == 0 ? MAGENTA : BLACK;
+        return ModBlocks.GLITCH_BLOCK.get().defaultBlockState();
     }
 
     private static boolean isManMade(BlockState state) {

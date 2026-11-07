@@ -15,6 +15,7 @@ public class AnchorsMod {
         ModItems.ITEMS.register(modBus);
         ModEntities.ENTITIES.register(modBus);
         ModSounds.SOUNDS.register(modBus);
+        ModBlocks.BLOCKS.register(modBus);
         modBus.addListener(this::addToCreativeTab);
     }
 
@@ -23,6 +24,7 @@ public class AnchorsMod {
             event.accept(ModItems.OLD_LANTERN);
             event.accept(ModItems.MUSIC_BOX);
             event.accept(ModItems.RAG_DOLL);
+            event.accept(ModItems.INVERTED_CROSS);
         }
     }
 }

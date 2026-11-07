@@ -25,6 +25,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.npc.Villager;
@@ -290,6 +291,12 @@ public class ModEvents {
         double ay = altar.getY() + 1.0;
         double az = altar.getZ() + 0.5;
 
+        if (!data.isCrossPlaced()) {
+            player.displayClientMessage(Component.translatable("message.anchors.ritual_no_cross"), true);
+            playAt(level, ax, ay, az, "block.candle.extinguish", 1.0F, 0.6F);
+            return;
+        }
+
         if (kind != progress) {
             player.displayClientMessage(Component.translatable("message.anchors.ritual_wrong"), true);
             playAt(level, ax, ay, az, "block.candle.extinguish", 1.0F, 0.8F);
@@ -312,6 +319,40 @@ public class ModEvents {
         } else {
             player.displayClientMessage(Component.translatable("message.anchors.ritual_step_" + (progress + 1)), true);
         }
+    }
+
+    /** Рама над алтарём: в неё вставляется перевёрнутый крест (ритуал без него не начнётся). */
+    @SubscribeEvent
+    public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (event.getLevel().isClientSide()) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!(event.getTarget() instanceof ItemFrame frame)) return;
+        if (!frame.getPersistentData().getBoolean(AbandonedStructures.TAG_ALTAR_FRAME)) return;
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+
+        // с этой рамой работает только наш крест, обычного поведения рамы нет
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
+
+        ServerLevel level = player.serverLevel();
+        FadingData data = FadingData.get(level.getServer());
+        if (data.isRitualDone() || data.isCrossPlaced()) return;
+
+        ItemStack held = player.getMainHandItem();
+        if (!held.is(ModItems.INVERTED_CROSS.get())) {
+            player.displayClientMessage(Component.translatable("message.anchors.frame_empty"), true);
+            return;
+        }
+
+        held.shrink(1);
+        frame.setItem(new ItemStack(ModItems.INVERTED_CROSS.get()));
+        data.setCrossPlaced(true);
+
+        player.displayClientMessage(Component.translatable("message.anchors.cross_placed"), true);
+        level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, frame.getX(), frame.getY(), frame.getZ(),
+                25, 0.4, 0.5, 0.4, 0.03);
+        playAt(level, frame.getX(), frame.getY(), frame.getZ(), "block.beacon.power_select", 1.0F, 0.6F);
+        playAt(level, frame.getX(), frame.getY(), frame.getZ(), "entity.warden.heartbeat", 1.0F, 0.7F);
     }
 
     /** Хорошая концовка: души свободны, постройки целы, Угасание исчезает. */
@@ -341,6 +382,9 @@ public class ModEvents {
         for (FadingData.StructureRecord record : data.getStructures()) {
             AbandonedStructures.restore(level, record.pos(), AbandonedStructures.Kind.values()[record.kind()]);
         }
+
+        // возвращаем деревья и постройки, которые удалили глюки
+        data.restoreRemoved(level);
 
         // надпись на экране у всех игроков
         for (ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
