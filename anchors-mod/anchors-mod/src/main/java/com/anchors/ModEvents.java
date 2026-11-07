@@ -54,8 +54,8 @@ import net.minecraftforge.registries.ForgeRegistries;
 public class ModEvents {
 
     /** Сколько "Угасания" добавляется за каждую секунду с включённым предметом. */
-    private static final double FADING_PER_SECOND_LANTERN = 1.0;
-    private static final double FADING_PER_SECOND_MUSIC_BOX = 1.0;
+    private static final double FADING_PER_SECOND_LANTERN = 0.4;
+    private static final double FADING_PER_SECOND_MUSIC_BOX = 0.4;
 
     /** Мелодия шкатулки: числа это ноты (12 = базовая), -1 = пауза. Одна нота раз в NOTE_INTERVAL тиков. */
     private static final int NOTE_INTERVAL = 8;
@@ -66,16 +66,18 @@ public class ModEvents {
     private static final int[] LANTERN_MELODY = {12, 10, 7, -1, 10, 7, 3, -1};
 
     /** Сколько "Угасания" мир забирает, когда кукла принимает смертельный удар. */
-    private static final double FADING_PER_DOLL_SAVE = 60.0;
+    private static final double FADING_PER_DOLL_SAVE = 40.0;
 
     /** Метка "этому игроку уже ставили сундук с дневником" (хранится вместе с игроком). */
     private static final String TAG_DIARY_GIVEN = "anchors_diary_given";
 
     /**
      * Сколько Угасания мир набирает сам каждую секунду после того, как кто-то впервые взял якорь.
-     * 0.4 в секунду = примерно 40 минут до четвёртой стадии (приход Коллекционера), если не пользоваться якорями.
+     * 0.25 в секунду: четвёртая стадия (1000) наступает примерно через час с небольшим,
+     * а время выходит (плохая концовка) примерно через 80 минут, если почти не пользоваться якорями.
+     * Хочешь ещё медленнее: уменьши число. Хочешь быстрее: увеличь.
      */
-    private static final double PASSIVE_FADING_PER_SECOND = 0.4;
+    private static final double PASSIVE_FADING_PER_SECOND = 0.25;
 
     /**
      * Сколько Угасания нужно, чтобы время вышло и пришёл Коллекционер (плохая концовка).

@@ -176,9 +176,11 @@ public final class GlitchEffects {
                 if (dx * dx + dz * dz > 4 || random.nextFloat() > 0.75F) continue;
                 BlockPos ground = surfaceAt(level, center.getX() + dx, center.getZ() + dz);
                 if (ground == null) continue;
-                BlockState blood = random.nextFloat() < 0.6F
-                        ? Blocks.NETHER_WART_BLOCK.defaultBlockState()
-                        : Blocks.RED_TERRACOTTA.defaultBlockState();
+                float roll = random.nextFloat();
+                BlockState blood;
+                if (roll < 0.5F) blood = ModBlocks.GLITCH_MEAT.get().defaultBlockState();   // мясо
+                else if (roll < 0.8F) blood = Blocks.NETHER_WART_BLOCK.defaultBlockState();
+                else blood = Blocks.RED_TERRACOTTA.defaultBlockState();
                 fake(player, level, ground, blood, duration, tick);
             }
         }
@@ -373,9 +375,15 @@ public final class GlitchEffects {
         list.add(new Restore(pos.immutable(), tick + duration));
     }
 
-    /** Блок с настоящей "сломанной текстурой" (картинка лежит в textures/item/glitch.png). */
+    /**
+     * Блок для глюка: половина "сломанная текстура", почти треть мясо, остальное красное лицо.
+     * Выбор зависит от места, так что в одном месте блок всегда одинаковый.
+     */
     private static BlockState checker(BlockPos pos) {
-        return ModBlocks.GLITCH_BLOCK.get().defaultBlockState();
+        int h = Math.floorMod(pos.hashCode(), 10);
+        if (h < 5) return ModBlocks.GLITCH_BLOCK.get().defaultBlockState();
+        if (h < 8) return ModBlocks.GLITCH_MEAT.get().defaultBlockState();
+        return ModBlocks.GLITCH_FACE.get().defaultBlockState();
     }
 
     private static boolean isManMade(BlockState state) {
