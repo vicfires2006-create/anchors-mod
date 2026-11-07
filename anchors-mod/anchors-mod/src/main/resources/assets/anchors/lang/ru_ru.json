@@ -28,5 +28,10 @@
   "message.anchors.ritual_step_2": "Вторая свеча горит. Колыбельная зазвучала снова.",
   "message.anchors.ritual_title": "Души свободны",
   "message.anchors.ritual_subtitle": "Мир снова вздохнул",
-  "entity.anchors.collector": "Коллекционер"
+  "entity.anchors.collector": "Коллекционер",
+  "item.anchors.inverted_cross": "Перевёрнутый крест",
+  "item.anchors.inverted_cross.desc": "Он должен занять своё место в раме над алтарём.",
+  "message.anchors.frame_empty": "Рама пуста. Здесь чего-то не хватает.",
+  "message.anchors.cross_placed": "Крест занял своё место. Алтарь пробуждается.",
+  "message.anchors.ritual_no_cross": "Алтарь спит. Рама над ним всё ещё пуста."
 }

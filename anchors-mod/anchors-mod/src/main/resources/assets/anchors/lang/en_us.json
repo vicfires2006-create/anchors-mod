@@ -28,5 +28,10 @@
   "message.anchors.ritual_step_2": "The second candle burns. The lullaby sounds once more.",
   "message.anchors.ritual_title": "The souls are free",
   "message.anchors.ritual_subtitle": "The world breathes again",
-  "entity.anchors.collector": "The Collector"
+  "entity.anchors.collector": "The Collector",
+  "item.anchors.inverted_cross": "Inverted Cross",
+  "item.anchors.inverted_cross.desc": "It must take its place in the frame above the altar.",
+  "message.anchors.frame_empty": "The frame is empty. Something is missing here.",
+  "message.anchors.cross_placed": "The cross has taken its place. The altar stirs.",
+  "message.anchors.ritual_no_cross": "The altar stays asleep. The frame above it is still empty."
 }
