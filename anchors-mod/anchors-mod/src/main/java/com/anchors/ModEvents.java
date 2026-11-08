@@ -174,6 +174,13 @@ public class ModEvents {
                 && !BadEnding.isActive()) {
             event.setCanceled(true);
         }
+
+        // Коллекционер из давнего появления (игра закрылась) тоже не возвращается
+        if (event.getEntity() instanceof CollectorEntity sighting
+                && sighting.getPersistentData().getBoolean(CollectorSightings.TAG_SIGHTING)
+                && !CollectorSightings.isTracked(sighting.getUUID())) {
+            event.setCanceled(true);
+        }
     }
 
     /** Перед остановкой сервера всех размораживаем и убираем временное. */
@@ -183,11 +190,34 @@ public class ModEvents {
         GlitchEffects.clearAll();
         EndingScene.clear();
         BadEnding.clear();
+        CollectorSightings.clear();
     }
 
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         GlitchEffects.clearPlayer(event.getEntity().getUUID());
+        if (event.getEntity() instanceof ServerPlayer leaving) {
+            CollectorSightings.removeFor(leaving);
+        }
+    }
+
+    /** Команда /glitch: поставить кусок "???" в нескольких блоках перед собой (для проверки). */
+    @SubscribeEvent
+    public static void onRegisterGlitchCommand(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("glitch")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> {
+                    GlitchEffects.spawnAhead(ctx.getSource().getPlayerOrException());
+                    return 1;
+                }));
+    }
+
+    /** Команда /sighting: показать Коллекционера где-то рядом, прячущимся (он пропадёт, когда посмотришь на него). */
+    @SubscribeEvent
+    public static void onRegisterSightingCommand(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("sighting")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> CollectorSightings.spawnNow(ctx.getSource().getPlayerOrException()) ? 1 : 0));
     }
 
     /** Команда /badending: проверить плохую концовку. Мир после неё НЕ закрывается. */
@@ -231,6 +261,7 @@ public class ModEvents {
         GlitchEffects.tick(server);
         EndingScene.tick(server);
         BadEnding.tick(server);
+        CollectorSightings.tick(server);
 
         if (tick % 20 != 0) return;
 
@@ -385,8 +416,14 @@ public class ModEvents {
             AbandonedStructures.restore(level, record.pos(), AbandonedStructures.Kind.values()[record.kind()]);
         }
 
-        // возвращаем деревья и постройки, которые удалили глюки
+        // возвращаем деревья, постройки и блоки "???", которые заменили глюки
         data.restoreRemoved(level);
+        CollectorSightings.removeAll(level.getServer());
+
+        // игрокам возвращаются вещи, которые превратились в "???"
+        for (ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
+            GlitchEffects.returnSwappedItems(p);
+        }
 
         // надпись на экране у всех игроков
         for (ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
@@ -508,6 +545,11 @@ public class ModEvents {
         if (FadingData.get(player.serverLevel().getServer()).isWorldLost()) {
             player.connection.disconnect(Component.literal("Этого мира больше нет. Его забрал Коллекционер."));
             return;
+        }
+
+        // если ритуал завершён, а у игрока остались подменённые вещи (он был не в сети), возвращаем их
+        if (FadingData.get(player.serverLevel().getServer()).isRitualDone()) {
+            GlitchEffects.returnSwappedItems(player);
         }
 
         CompoundTag persisted = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
@@ -664,6 +706,7 @@ public class ModEvents {
 
         // Глюки: сломанные текстуры, кровь, ямы, пропадающие дома, заморозка экрана
         GlitchEffects.secondTick(player, level, stage);
+        CollectorSightings.secondTick(player, level, stage);
 
         // Стадия 4: здесь позже появится Коллекционер
     }

@@ -25,6 +25,9 @@ public class AnchorsMod {
             event.accept(ModItems.MUSIC_BOX);
             event.accept(ModItems.RAG_DOLL);
             event.accept(ModItems.INVERTED_CROSS);
+            event.accept(ModItems.GLITCH_BLOCK_ITEM);
+            event.accept(ModItems.GLITCH_MEAT_ITEM);
+            event.accept(ModItems.GLITCH_FACE_ITEM);
         }
     }
 }

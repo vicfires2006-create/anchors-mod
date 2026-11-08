@@ -217,7 +217,8 @@ public class FadingData extends SavedData {
         for (int i = 0; i < removedPositions.size(); i++) {
             BlockPos pos = removedPositions.get(i);
             level.getChunk(pos.getX() >> 4, pos.getZ() >> 4);
-            if (level.getBlockState(pos).isAir()) {
+            BlockState current = level.getBlockState(pos);
+            if (current.isAir() || ModBlocks.isGlitchBlock(current)) {
                 level.setBlock(pos, removedStates.get(i), 2);
             }
         }

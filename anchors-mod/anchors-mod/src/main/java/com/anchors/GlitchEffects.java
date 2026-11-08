@@ -15,6 +15,9 @@ import org.joml.Vector3f;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -25,6 +28,12 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -43,13 +52,16 @@ import net.minecraftforge.registries.ForgeRegistries;
 public final class GlitchEffects {
 
     // ---------- настройки: шансы на каждую секунду, в процентах (по стадиям 2, 3, 4) ----------
-    private static final int[] CHANCE_GLITCH = {4, 10, 18};   // сломанные текстуры
-    private static final int[] CHANCE_BLOOD = {0, 6, 12};     // кровь на земле
+    private static final int[] CHANCE_GLITCH = {2, 4, 7};   // сломанные текстуры
+    private static final int[] CHANCE_BLOOD = {0, 3, 6};     // кровь на земле
     private static final int[] CHANCE_HOLE = {0, 4, 9};       // ямы
     private static final int[] CHANCE_BUILDING = {0, 3, 7};   // дома ломаются или пропадают
     /** Шанс заморозки за секунду, в промилле (по стадиям 3 и 4). Между заморозками минимум 90 секунд. */
     private static final int[] CHANCE_FREEZE_PERMILLE = {10, 25};
     private static final int FREEZE_COOLDOWN_TICKS = 20 * 90;
+
+    /** Шанс за секунду (в процентах) на четвёртой стадии, что одна вещь в инвентаре превратится в "???". */
+    private static final int CHANCE_SWAP_PERCENT = 4;
 
     /** Настоящее удаление деревьев и построек (шанс за секунду в промилле по стадиям 2, 3, 4). */
     private static final int[] CHANCE_DELETE_PERMILLE = {0, 15, 40};
@@ -89,6 +101,7 @@ public final class GlitchEffects {
         if (random.nextInt(100) < CHANCE_HOLE[index]) groundHole(player, level, tick);
         if (random.nextInt(100) < CHANCE_BUILDING[index]) buildingGlitch(player, level, tick, stage >= 4);
         if (stage >= 3) tryFreeze(player, level, tick, stage);
+        if (stage >= 4 && random.nextInt(100) < CHANCE_SWAP_PERCENT) swapInventoryItem(player, level);
         if (random.nextInt(1000) < CHANCE_DELETE_PERMILLE[index]) deleteTreeOrBuilding(player, level);
     }
 
@@ -150,27 +163,44 @@ public final class GlitchEffects {
     // Отдельные глюки
     // =====================================================================
 
-    /** Кусок мира рядом превращается в "сломанную текстуру": фиолетово-чёрная шахматка. */
+    /** Кусок мира рядом по-настоящему превращается в "???". Блоки остаются на месте до самого ритуала. */
     private static void glitchCluster(ServerPlayer player, ServerLevel level, int tick) {
-        RandomSource random = level.random;
         BlockPos center = randomSurface(player, level, 4, 14);
         if (center == null) return;
 
-        int duration = 40 + random.nextInt(80);
-        for (int i = 0; i < 10; i++) {
-            BlockPos pos = center.offset(random.nextInt(3) - 1, random.nextInt(3) - 1, random.nextInt(3) - 1);
-            fake(player, level, pos, checker(pos), duration, tick);
-        }
-        playNotify(player, "block.note_block.bit", 0.5F, 0.5F + random.nextFloat() * 0.5F);
+        placeCluster(level, center, 10);
+        playNotify(player, "block.note_block.bit", 0.5F, 0.5F + level.random.nextFloat() * 0.5F);
     }
 
-    /** Лужа крови на земле и красные брызги. */
+    /** Настоящий кусок "???" вокруг точки. */
+    public static void placeCluster(ServerLevel level, BlockPos center, int count) {
+        FadingData data = FadingData.get(level.getServer());
+        RandomSource random = level.random;
+        for (int i = 0; i < count; i++) {
+            BlockPos pos = center.offset(random.nextInt(3) - 1, random.nextInt(3) - 1, random.nextInt(3) - 1);
+            placeReal(level, data, pos, checker(pos));
+        }
+    }
+
+    /** Для команды /glitch: кусок "???" в нескольких блоках перед игроком. */
+    public static void spawnAhead(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        double yaw = Math.toRadians(player.getYRot());
+        int x = (int) Math.floor(player.getX() - Math.sin(yaw) * 6.0);
+        int z = (int) Math.floor(player.getZ() + Math.cos(yaw) * 6.0);
+        BlockPos ground = surfaceAt(level, x, z);
+        if (ground != null) {
+            placeCluster(level, ground, 14);
+        }
+    }
+
+    /** Лужа крови и мяса на земле (настоящие блоки, остаются до ритуала) и красные брызги. */
     private static void bloodSplatter(ServerPlayer player, ServerLevel level, int tick) {
         RandomSource random = level.random;
         BlockPos center = randomSurface(player, level, 4, 12);
         if (center == null) return;
+        FadingData data = FadingData.get(level.getServer());
 
-        int duration = 120 + random.nextInt(120);
         for (int dx = -2; dx <= 2; dx++) {
             for (int dz = -2; dz <= 2; dz++) {
                 if (dx * dx + dz * dz > 4 || random.nextFloat() > 0.75F) continue;
@@ -181,13 +211,38 @@ public final class GlitchEffects {
                 if (roll < 0.5F) blood = ModBlocks.GLITCH_MEAT.get().defaultBlockState();   // мясо
                 else if (roll < 0.8F) blood = Blocks.NETHER_WART_BLOCK.defaultBlockState();
                 else blood = Blocks.RED_TERRACOTTA.defaultBlockState();
-                fake(player, level, ground, blood, duration, tick);
+                placeReal(level, data, ground, blood);
             }
         }
         DustParticleOptions red = new DustParticleOptions(new Vector3f(0.6F, 0.0F, 0.0F), 1.5F);
         level.sendParticles(player, red, false, center.getX() + 0.5, center.getY() + 1.2, center.getZ() + 0.5,
                 25, 0.9, 0.5, 0.9, 0.0);
         playNotify(player, "entity.warden.heartbeat", 0.7F, 0.7F);
+    }
+
+    /** Ставит настоящий блок вместо обычного, запомнив прежний (после ритуала он вернётся). */
+    private static boolean placeReal(ServerLevel level, FadingData data, BlockPos pos, BlockState state) {
+        if (!level.hasChunkAt(pos)) return false;
+        if (data.getRemovedCount() >= MAX_REMOVED_BLOCKS) return false;
+        if (nearModStructure(data, pos)) return false;
+        BlockState real = level.getBlockState(pos);
+        if (real.isAir() || real.hasBlockEntity() || ModBlocks.isGlitchBlock(real)) return false;
+        if (!real.getFluidState().isEmpty()) return false;
+        data.addRemoved(pos, real);
+        level.setBlock(pos, state, 2);
+        return true;
+    }
+
+    /** Убирает настоящий блок (воздух на его месте), запомнив прежний. */
+    private static boolean removeReal(ServerLevel level, FadingData data, BlockPos pos) {
+        if (!level.hasChunkAt(pos)) return false;
+        if (data.getRemovedCount() >= MAX_REMOVED_BLOCKS) return false;
+        if (nearModStructure(data, pos)) return false;
+        BlockState real = level.getBlockState(pos);
+        if (real.isAir() || real.hasBlockEntity() || ModBlocks.isGlitchBlock(real)) return false;
+        data.addRemoved(pos, real);
+        level.setBlock(pos, AIR, 2);
+        return true;
     }
 
     /** Внезапная яма 2x2 глубиной в три блока. */
@@ -233,6 +288,7 @@ public final class GlitchEffects {
         }
         if (manMade.size() < 12) return; // здесь ничего не построено
 
+        FadingData data = FadingData.get(level.getServer());
         boolean vanish = strong && random.nextBoolean();
         int duration = (vanish ? 100 : 80) + random.nextInt(100);
 
@@ -240,7 +296,9 @@ public final class GlitchEffects {
             if (vanish) {
                 fake(player, level, pos, AIR, duration, tick);
             } else if (random.nextFloat() < 0.45F) {
-                fake(player, level, pos, random.nextBoolean() ? AIR : checker(pos), duration, tick);
+                // по-настоящему: дыра или "???" (после ритуала всё вернётся)
+                if (random.nextBoolean()) removeReal(level, data, pos);
+                else placeReal(level, data, pos, checker(pos));
             }
         }
         playNotify(player, "block.stone.break", 0.9F, 0.5F);
@@ -357,6 +415,76 @@ public final class GlitchEffects {
         return false;
     }
 
+    /** Метка в данных игрока: оригиналы вещей, которые подменили на "???". */
+    private static final String TAG_SWAPPED = "anchors_swapped_items";
+
+    /** На четвёртой стадии одна случайная вещь из инвентаря превращается в "???". Оригинал запоминается и вернётся после ритуала. */
+    private static void swapInventoryItem(ServerPlayer player, ServerLevel level) {
+        RandomSource random = level.random;
+        Inventory inventory = player.getInventory();
+
+        List<Integer> candidates = new ArrayList<>();
+        for (int i = 0; i < inventory.items.size(); i++) {
+            ItemStack stack = inventory.items.get(i);
+            if (!stack.isEmpty() && !isProtectedItem(stack)) candidates.add(i);
+        }
+        if (candidates.isEmpty()) return;
+
+        int slot = candidates.get(random.nextInt(candidates.size()));
+        ItemStack original = inventory.items.get(slot);
+
+        CompoundTag persisted = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
+        ListTag saved = persisted.getList(TAG_SWAPPED, Tag.TAG_COMPOUND);
+        saved.add(original.save(new CompoundTag()));
+        persisted.put(TAG_SWAPPED, saved);
+        player.getPersistentData().put(Player.PERSISTED_NBT_TAG, persisted);
+
+        Item replacement;
+        int pick = random.nextInt(3);
+        if (pick == 0) replacement = ModItems.GLITCH_BLOCK_ITEM.get();
+        else if (pick == 1) replacement = ModItems.GLITCH_MEAT_ITEM.get();
+        else replacement = ModItems.GLITCH_FACE_ITEM.get();
+        inventory.items.set(slot, new ItemStack(replacement));
+
+        playNotify(player, "block.sculk_sensor.clicking", 0.8F, 0.5F);
+    }
+
+    /** После ритуала: убирает все "???" из инвентаря и возвращает настоящие вещи. */
+    public static void returnSwappedItems(ServerPlayer player) {
+        CompoundTag persisted = player.getPersistentData().getCompound(Player.PERSISTED_NBT_TAG);
+        ListTag saved = persisted.getList(TAG_SWAPPED, Tag.TAG_COMPOUND);
+        Inventory inventory = player.getInventory();
+
+        for (int i = 0; i < inventory.items.size(); i++) {
+            if (isGlitchItem(inventory.items.get(i))) {
+                inventory.items.set(i, ItemStack.EMPTY);
+            }
+        }
+        for (int i = 0; i < saved.size(); i++) {
+            ItemStack original = ItemStack.of(saved.getCompound(i));
+            if (!original.isEmpty() && !inventory.add(original)) {
+                player.drop(original, false);
+            }
+        }
+        persisted.remove(TAG_SWAPPED);
+        player.getPersistentData().put(Player.PERSISTED_NBT_TAG, persisted);
+    }
+
+    private static boolean isGlitchItem(ItemStack stack) {
+        return stack.getItem() instanceof BlockItem blockItem
+                && ModBlocks.isGlitchBlock(blockItem.getBlock().defaultBlockState());
+    }
+
+    /** Якоря, крест и дневники не подменяются никогда. */
+    private static boolean isProtectedItem(ItemStack stack) {
+        return stack.getItem() instanceof OldLanternItem
+                || stack.getItem() instanceof MusicBoxItem
+                || stack.getItem() instanceof RagDollItem
+                || stack.getItem() instanceof InvertedCrossItem
+                || stack.is(Items.WRITTEN_BOOK)
+                || isGlitchItem(stack);
+    }
+
     // =====================================================================
     // Помощники
     // =====================================================================
@@ -407,7 +535,7 @@ public final class GlitchEffects {
     }
 
     /** Верхний твёрдый блок земли в точке (или null, если кусок мира не загружен или там вода). */
-    private static BlockPos surfaceAt(ServerLevel level, int x, int z) {
+    static BlockPos surfaceAt(ServerLevel level, int x, int z) {
         BlockPos probe = new BlockPos(x, level.getMinBuildHeight() + 1, z);
         if (!level.hasChunkAt(probe)) return null;
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
