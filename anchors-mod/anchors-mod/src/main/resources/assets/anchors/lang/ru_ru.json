@@ -33,5 +33,8 @@
   "item.anchors.inverted_cross.desc": "Он должен занять своё место в раме над алтарём.",
   "message.anchors.frame_empty": "Рама пуста. Здесь чего-то не хватает.",
   "message.anchors.cross_placed": "Крест занял своё место. Алтарь пробуждается.",
-  "message.anchors.ritual_no_cross": "Алтарь спит. Рама над ним всё ещё пуста."
+  "message.anchors.ritual_no_cross": "Алтарь спит. Рама над ним всё ещё пуста.",
+  "block.anchors.glitch_block": "???",
+  "block.anchors.glitch_meat": "???",
+  "block.anchors.glitch_face": "???"
 }
